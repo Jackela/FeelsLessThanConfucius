@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: Confucian RAG Agent API
+  version: 0.1.0
+servers:
+  - url: https://api.example.com
+paths:
+  /generate:
+    post:
+      summary: 生成三段式“孔孟之道体”文本（中文）
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                  description: 当代主题或素材
+              required: [prompt]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trace_id: { type: string }
+                  part1_ancient: { type: string }
+                  part2_modern: { type: string }
+                  part3_closure: { type: string }
+                  confidence: { type: number, format: float, description: Overall confidence (0..1) }
+                  provenance: { $ref: '#/components/schemas/Provenance' }
+                  safety: { $ref: '#/components/schemas/Safety' }
+        '401': { description: 缺失或无效 API Key }
+        '429': { description: 速率限制/配额超限（含 Retry-After） }
+  /speak:
+    post:
+      summary: 将既有文本合成为中文语音并返回节拍
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string }
+              required: [text]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trace_id: { type: string }
+                  audio_url: { type: string, format: uri }
+                  timings:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        start_ms: { type: integer }
+                        end_ms: { type: integer }
+                        unit: { type: string }
+        '401': { description: 缺失或无效 API Key }
+        '429': { description: 速率限制/配额超限 }
+  /render:
+    post:
+      summary: 使用语音与节拍驱动低清晰度 Live2D 动画，导出短视频
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                audio_url: { type: string, format: uri }
+                timings:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      start_ms: { type: integer }
+                      end_ms: { type: integer }
+                      unit: { type: string }
+              required: [audio_url, timings]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  trace_id: { type: string }
+                  video_url: { type: string, format: uri }
+        '401': { description: 缺失或无效 API Key }
+        '429': { description: 速率限制/配额超限 }
+  /provenance/{trace_id}:
+    get:
+      summary: 查看单次生成的溯源与延迟
+      parameters:
+        - in: path
+          name: trace_id
+          required: true
+          schema: { type: string }
+      security:
+        - ApiKeyAuth: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Provenance'
+        '401': { description: 缺失或无效 API Key }
+        '404': { description: 记录不存在或已过期（≥30 天） }
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  schemas:
+    Provenance:
+      type: object
+      properties:
+        trace_id: { type: string }
+        model: { type: string }
+        prompt_template_version: { type: string }
+        sources:
+          type: array
+          items:
+            type: object
+            properties:
+              passage_id: { type: string }
+              title: { type: string }
+              location: { type: string }
+              confidence: { type: number, format: float, description: Source-level confidence (0..1) }
+        params: { type: object }
+        latency_ms:
+          type: object
+          properties:
+            text: { type: integer }
+            tts: { type: integer }
+            render: { type: integer }
+            end_to_end: { type: integer }
+        confidence:
+          type: number
+          format: float
+          description: Overall confidence (0..1)
+    Safety:
+      type: object
+      properties:
+        risk: { type: string, enum: [low, medium, high] }
+        action: { type: string, enum: [pass, alter, reject] }
+        reason: { type: string }
